@@ -8,31 +8,35 @@ export const protect = async (
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
-  const authHeader = req.headers.authorization;
+  try {
+    const authHeader = req.headers.authorization;
 
-  // 1. Check token exists
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ message: "No token, authorization denied" });
-    return;
+    // 1. Check token exists
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({ message: "No token, authorization denied" });
+      return;
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    // 2. Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
+      id: string;
+    };
+
+    // 3. Find user
+    const user = await User.findById(decoded.id).select("-password");
+    if (!user) {
+      res.status(401).json({ message: "User no longer exists" });
+      return;
+    }
+
+    // 4. Attach user to request
+    req.user = user;
+    next();
+  } catch {
+    res.status(401).json({ message: "Invalid or expired token" });
   }
-
-  const token = authHeader.split(" ")[1];
-
-  // 2. Verify token
-  const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
-    id: string;
-  };
-
-  // 3. Find user
-  const user = await User.findById(decoded.id).select("-password");
-  if (!user) {
-    res.status(401).json({ message: "User no longer exists" });
-    return;
-  }
-
-  // 4. Attach user to request
-  req.user = user;
-  next();
 };
 
 // Role guard — use after protect
